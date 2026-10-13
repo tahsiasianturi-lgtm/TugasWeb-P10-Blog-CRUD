@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tugas 10 v2 — Blog Resep CRUD</title>
+<style>
+:root{--bg:#fff8f1;--fg:#3a2414;--mu:#8a6b55;--cd:#fff;--bd:#efd9c6;--ac:#e0662b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b130d;--fg:#f6e8dc;--mu:#c2a58f;--cd:#271b13;--bd:#45301f}}
+:root[data-theme="dark"]{--bg:#1b130d;--fg:#f6e8dc;--mu:#c2a58f;--cd:#271b13;--bd:#45301f}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0 auto;background:var(--bg);color:var(--fg);font:16px/1.5 Georgia,serif;padding:14px;max-width:720px}
+h1{font-size:24px;margin:0}.sub{color:var(--mu);font:13px system-ui}
+.bar{display:flex;gap:8px;margin:12px 0}
+input,textarea{font:16px system-ui;padding:10px;border:1px solid var(--bd);border-radius:10px;background:var(--cd);color:var(--fg);width:100%;box-sizing:border-box}
+button{font:14px system-ui;padding:9px 13px;border-radius:10px;border:1px solid var(--bd);background:var(--cd);color:var(--fg)}
+.pri{background:var(--ac);border-color:var(--ac);color:#fff;white-space:nowrap}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:460px){.grid{grid-template-columns:1fr}}
+.card{background:var(--cd);border:1px solid var(--bd);border-radius:14px;padding:14px;position:relative}
+.card h3{margin:0 0 4px;font-size:17px}.card p{margin:4px 0 10px;color:var(--mu);font:14px system-ui}
+.chip{font:11px monospace;background:var(--bg);border:1px solid var(--bd);border-radius:20px;padding:2px 8px;color:var(--mu)}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.toast{position:sticky;top:6px;background:#1f8a4c;color:#fff;border-radius:10px;padding:10px 12px;margin:8px 0;font:14px system-ui;z-index:5;display:flex;justify-content:space-between;gap:8px}
+.mod{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;justify-content:center;z-index:9}
+.sheet{background:var(--bg);width:100%;max-width:720px;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px));box-sizing:border-box;max-height:88vh;overflow-y:auto}
+.err{color:#d33;font:13px system-ui}label{font:600 13px system-ui}
+.pg{display:flex;justify-content:center;align-items:center;gap:10px;margin:14px 0;font:14px system-ui}
+pre{background:var(--cd);border:1px solid var(--bd);border-radius:8px;padding:10px;overflow-x:auto;font-size:12px}
+details summary{font:600 15px system-ui;padding:8px 0}
+</style></head><body>
+<h1>🍲 Blog Resep</h1>
+<div class="sub">Tugas Rutin 10 — Blog CRUD (simulasi di browser, data hilang saat refresh)</div>
+<div class="bar"><input id="q" placeholder="🔎 Cari resep (bonus pencarian)" oninput="page=1;draw()"><button class="pri" onclick="openF()">+ Baru</button></div>
+<div id="fl"></div><div id="list"></div><div class="pg" id="pg"></div>
+<div id="modal"></div>
+
+<h2 style="font:600 16px system-ui">💻 Kode Laravel</h2>
+<details><summary>Route & Controller</summary><pre>Route::resource('posts', PostController::class);
+
+public function index(Request $r) {
+    $posts = Post::when($r->q, fn($q) =>
+            $q->where('title', 'like', "%{$r->q}%"))
+        ->latest()->paginate(4)->withQueryString();
+    return view('posts.index', compact('posts'));
+}
+public function store(StorePostRequest $r) {
+    Post::create($r->validated());
+    return to_route('posts.index')->with('success', 'Resep dibuat!');
+}
+public function update(StorePostRequest $r, Post $post) {
+    $post->update($r->validated());
+    return to_route('posts.index')->with('success', 'Resep diperbarui!');
+}
+public function destroy(Post $post) {
+    $post->delete();
+    return to_route('posts.index')->with('success', 'Resep dihapus!');
+}</pre></details>
+<details><summary>Form Request, Model, Migration</summary><pre>// StorePostRequest
+public function rules(): array {
+    return [
+        'title' => ['required', 'string', 'max:100'],
+        'body'  => ['required', 'min:15'],
+    ];
+}
+// Post.php
+protected $fillable = ['title', 'body'];
+// migration
+$t->string('title', 100);
+$t->text('body');
+$t->timestamps();</pre></details>
+<details><summary>Blade: layout + components</summary><pre>{{-- layouts/app.blade.php --}}
+&lt;x-alert /&gt; @yield('content')
+
+{{-- components/card.blade.php --}}
+@props(['post'])
+&lt;div class="card"&gt;
+  &lt;h3&gt;{{ $post->title }}&lt;/h3&gt;
+  &lt;p&gt;{{ Str::limit($post->body, 60) }}&lt;/p&gt;
+  {{ $slot }}
+&lt;/div&gt;
+
+{{-- form --}}
+&lt;form method="POST" action="{{ route('posts.update', $post) }}"&gt;
+  @csrf @method('PUT')
+  &lt;input name="title" value="{{ old('title', $post->title) }}"&gt;
+  @error('title') &lt;small&gt;{{ $message }}&lt;/small&gt; @enderror
+&lt;/form&gt;</pre></details>
+
+<script>
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let posts=[['Nasi Goreng Kampung','Tumis bumbu halus, masukkan nasi dingin, tambahkan kecap dan telur orak-arik.'],['Soto Ayam','Rebus ayam dengan serai dan daun jeruk, sajikan dengan soun dan telur.'],['Sambal Terasi','Ulek cabai, terasi bakar, tomat, dan garam hingga halus lalu tumis sebentar.'],['Pisang Goreng','Balur pisang dengan adonan tepung, goreng hingga keemasan dan renyah.'],['Es Teh Lemon','Seduh teh pekat, tambahkan gula dan perasan lemon, sajikan dengan es batu.'],['Telur Dadar','Kocok telur dengan bawang dan garam, goreng tipis hingga kecokelatan.'],['Gado-gado','Rebus sayuran, siram saus kacang, tambahkan kerupuk dan telur rebus.']].map((x,i)=>({id:i+1,title:x[0],body:x[1]}));
+let nid=8,page=1,flash=null,errs={},ed=null;const PER=4;
+function draw(){
+ const q=document.getElementById('q').value.toLowerCase();
+ const f=[...posts].reverse().filter(p=>p.title.toLowerCase().includes(q)),pages=Math.max(1,Math.ceil(f.length/PER));if(page>pages)page=pages;
+ document.getElementById('fl').innerHTML=flash?`<div class="toast">✓ ${esc(flash)}<span onclick="flash=null;draw()">✕</span></div>`:'';
+ document.getElementById('list').innerHTML=f.length?`<div class="grid">${f.slice((page-1)*PER,page*PER).map(p=>`<div class="card"><span class="chip">posts.show/${p.id}</span><h3>${esc(p.title)}</h3><p>${esc(p.body.slice(0,60))}…</p><div class="row"><button onclick="openF(${p.id})">✏️ Edit</button><button onclick="del(${p.id})">🗑 Hapus</button></div></div>`).join('')}</div>`:'<div class="card">Resep tidak ditemukan.</div>';
+ document.getElementById('pg').innerHTML=`<button ${page<=1?'disabled':''} onclick="page--;draw()">‹</button><span>Hal ${page} / ${pages} · ${f.length} resep</span><button ${page>=pages?'disabled':''} onclick="page++;draw()">›</button>`;
+}
+function openF(id){ed=id?posts.find(p=>p.id===id):null;errs={};form(ed?ed.title:'',ed?ed.body:'')}
+function form(t,b){document.getElementById('modal').innerHTML=`<div class="mod"><div class="sheet"><b>${ed?'PUT /posts/'+ed.id+' (posts.update)':'POST /posts (posts.store)'}</b><div class="sub">@csrf ${ed?"@method('PUT')":''}</div><br><label>Judul</label><input id="t" value="${esc(t)}">${errs.t?`<div class="err">${errs.t}</div>`:''}<br><br><label>Cara membuat</label><textarea id="b" rows="5">${esc(b)}</textarea>${errs.b?`<div class="err">${errs.b}</div>`:''}<br><br><div class="row"><button class="pri" onclick="save()">Simpan</button><button onclick="document.getElementById('modal').innerHTML=''">Batal</button></div></div></div>`}
+function save(){const t=document.getElementById('t').value.trim(),b=document.getElementById('b').value.trim();errs={};
+ if(!t)errs.t='Judul wajib diisi.';else if(t.length>100)errs.t='Judul maksimal 100 karakter.';
+ if(!b)errs.b='Isi wajib diisi.';else if(b.length<15)errs.b='Isi minimal 15 karakter.';
+ if(errs.t||errs.b){form(t,b);return}
+ if(ed){ed.title=t;ed.body=b;flash='Resep diperbarui!'}else{posts.push({id:nid++,title:t,body:b});flash='Resep dibuat!';page=1}
+ document.getElementById('modal').innerHTML='';draw()}
+function del(id){if(confirm('Hapus resep ini?')){posts=posts.filter(p=>p.id!==id);flash='Resep dihapus!';draw()}}
+draw();
+</script></body></html>
